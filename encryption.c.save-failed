@@ -1,0 +1,279 @@
+#include "arithmod.h"
+#include "encryption.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <math.h>
+#define T 2
+void KeyGen(Poly *sk, int64_t pk[2][DEGRE_MAX], Integer p){
+	//clé secrète
+	Poly a, e, res,tmp, pk0,pk1,mult;
+	//Intiniatialisation des polynômes
+	initialisePoly(sk);initialisePoly(&a);initialisePoly(&e);initialisePoly(&res);
+	initialisePoly(&tmp);initialisePoly(&pk0);initialisePoly(&pk1);initialisePoly(&mult);
+	//Allocation  dynamique des polynômes
+	Alloc_Poly(sk,DEGRE_MAX,p);Alloc_Poly(&a,DEGRE_MAX,p);Alloc_Poly(&e,DEGRE_MAX,p);Alloc_Poly(&res,DEGRE_MAX,p);
+	Alloc_Poly(&tmp,DEGRE_MAX,p);Alloc_Poly(&pk0,DEGRE_MAX,p);Alloc_Poly(&pk1,DEGRE_MAX,p);Alloc_Poly(&mult,DEGRE_MAX,p);
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		sk->coef[i] = Xkey();
+	}
+	//clé publique
+	// elements dans la distribution
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		a.coef[i] = DistributionUniforme(p);
+
+	}
+	// élement dans Xerr(Binomiale)
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		e.coef[i] = Binomiale();
+
+	}
+	ConvertSk(sk,&res,p);// convertir les elmts de sk en modulo p
+	Mult_ModPoly(&a,&res,&mult,p);//a*sk
+	Entier2Poly(&e,&tmp);//t*e
+	AddModPoly(&mult,&tmp,&pk0,p);//a*sk+t*e
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		pk1.coef[i] = -a.coef[i] + p.modulus;// SoustractionModulaire(-a.coef[i],0,p);//RQ(-a)
+	}
+
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		pk[0][i] = pk0.coef[i];
+	}
+
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		pk[1][i] = pk1.coef[i];
+	}
+	Free_Poly(&a);Free_Poly(&e);Free_Poly(&res);Free_Poly(&tmp);
+	Free_Poly(&pk0);Free_Poly(&pk1);Free_Poly(&mult);
+
+}
+void Encryption(Poly *plaintext, int64_t cipher[2][4] ,int64_t pubkey[2][4],Integer p){
+
+
+	Poly e0,e1,u,csk,te0,te1,umult0,umult1,pk0,pk1, som1,som2, som3;
+	//Initialisation des polynômes
+	initialisePoly(&e0);initialisePoly(&e1);initialisePoly(&u);initialisePoly(&csk);
+	initialisePoly(&te0);initialisePoly(&te1);initialisePoly(&umult0);initialisePoly(&umult1);
+	initialisePoly(&pk0);initialisePoly(&pk1);initialisePoly(&som1);initialisePoly(&som2);initialisePoly(&som3);
+	//Allocation dynamique
+	Alloc_Poly(&e0,DEGRE_MAX,p);Alloc_Poly(&e1,DEGRE_MAX,p);Alloc_Poly(&u,DEGRE_MAX,p);Alloc_Poly(&csk,DEGRE_MAX,p);
+	Alloc_Poly(&te0,DEGRE_MAX,p);Alloc_Poly(&te1,DEGRE_MAX,p);Alloc_Poly(&umult0,DEGRE_MAX,p);Alloc_Poly(&umult1,DEGRE_MAX,p);
+	Alloc_Poly(&pk0,DEGRE_MAX,p);Alloc_Poly(&pk1,DEGRE_MAX,p);Alloc_Poly(&som1,DEGRE_MAX,p);Alloc_Poly(&som2,DEGRE_MAX,p);
+	Alloc_Poly(&som3,DEGRE_MAX,p);
+	// Element dans Xerr
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		e0.coef[i] = Binomiale();
+	}
+
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		e1.coef[i] = Binomiale();
+	}
+	// Element dans Xkey
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		u.coef[i] = Xkey();
+	}
+	//cipher[0]
+	ConvertSk(&u,&csk,p);//convertir les elements u mod p
+	Entier2Poly(&e0,&te0);
+	Entier2Poly(&e1,&te1);
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		pk0.coef[i] = pubkey[0][i];
+	}
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		pk1.coef[i] = pubkey[1][i];
+	}
+	Mult_ModPoly(&csk,&pk0,&umult0,p);//u*pk[0]
+	Mult_ModPoly(&csk,&pk1,&umult1,p);//u*pk[1];
+	AddModPoly(&umult0,&te0,&som1,p);//u*pk[0] + te0;
+	AddModPoly(&umult1,&te1,&som2,p);//u*pk[1] + te1
+	AddModPoly(&som1,plaintext,&som3,p);//
+	//Remplir cipher[0]
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		cipher[0][i] = som3.coef[i];
+	}
+
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		cipher[1][i] = som2.coef[i];
+	}
+
+	Free_Poly(&e0);Free_Poly(&e1);Free_Poly(&u);Free_Poly(&csk);Free_Poly(&te0);Free_Poly(&umult0);
+	Free_Poly(&umult1);Free_Poly(&pk0);Free_Poly(&pk1);Free_Poly(&som1);Free_Poly(&som2);Free_Poly(&som3);
+
+}
+void Decryption(int64_t ciphertext[2][4],Poly *secretkey, Poly *message,Integer p){
+
+	Poly cipher0,cipher1,mult,tmp;
+	//Initialisation
+	initialisePoly(&cipher0);initialisePoly(&cipher1);initialisePoly(&mult);initialisePoly(&tmp);
+	//Allocation dynamique
+	Alloc_Poly(&cipher0,DEGRE_MAX,p);Alloc_Poly(&cipher1,DEGRE_MAX,p);Alloc_Poly(&mult,DEGRE_MAX,p);
+	Alloc_Poly(&tmp,DEGRE_MAX,p);
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		cipher0.coef[i] = ciphertext[0][i];
+	}
+
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		cipher1.coef[i] = ciphertext[1][i];
+	}
+	ConvertSk(secretkey,&tmp,p);
+	Mult_ModPoly(&cipher1,&tmp,&mult,p);
+	AddModPoly(&cipher0,&mult,message,p);//c0+c1*s
+	restcentre(message,p);
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		message->coef[i] = message->coef[i]%2;
+	}
+}
+
+void DecryptionMult(int64_t mult[3][4],Poly *cmult, Poly *sk,Integer p){
+	int64_t tmp0[2][4];
+	Poly mtmp, tmp1,powsk,tmp2,convsk;
+	initialisePoly(&mtmp);initialisePoly(&tmp1);initialisePoly(&powsk);initialisePoly(&tmp2);initialisePoly(&convsk);
+	Alloc_Poly(&mtmp,DEGRE_MAX,p);Alloc_Poly(&tmp1,DEGRE_MAX,p);Alloc_Poly(&powsk,DEGRE_MAX,p);Alloc_Poly(&tmp2,DEGRE_MAX,p);
+	Alloc_Poly(&convsk,DEGRE_MAX,p);
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		tmp0[0][i] = mult[0][i];
+	}
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		tmp0[1][i] = mult[1][i];
+	}
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		tmp1.coef[i] = mult[2][i];
+	}
+	ConvertSk(sk,&convsk,p);
+	Decryption(tmp0,sk,&mtmp,p);//ctilde0+ctilde1*s
+	Mult_ModPoly(&convsk,&convsk,&powsk,p);//sk^2
+	Mult_ModPoly(&tmp1,&powsk,&tmp2,p);//ctilde2*sk^2
+	AddModPoly(&mtmp,&tmp2,cmult,p);//
+	restcentre(cmult,p);
+	for (int i = 0; i < DEGRE_MAX; i++)
+	{
+		cmult->coef[i] = cmult->coef[i]%2;
+	}
+
+	Free_Poly(&mtmp);Free_Poly(&tmp1);Free_Poly(&powsk);Free_Poly(&tmp2);
+	Free_Poly(&convsk);
+}
+
+void KeyGenRNS(Poly *sk, PolyRNS pk[2], Integer *tab, int k){
+	Poly e, res,a,tmp;
+    Alloc_Poly(&e,DEGRE_MAX,tab[0]);
+	for(int i = 0; i< DEGRE_MAX;i++){
+        sk->coef[i] = Xkey();
+        e.coef[i] = Binomiale();
+	}
+	Entier2Poly(&e,&e);
+	for(int i = 0; i < k; i++){
+	    Alloc_Poly(&a,DEGRE_MAX,tab[i]);
+	    Alloc_Poly(&res,DEGRE_MAX,tab[i]);
+	    Alloc_Poly(&tmp,DEGRE_MAX,tab[i]);
+        for(int j = 0; j < DEGRE_MAX; j++){
+            a.coef[j] = DistributionUniforme(tab[i]);
+        }
+        ConvertSk(sk,&res,tab[i]);
+        Mult_ModPoly(&a,&res,&pk[0].tab[i],tab[i]);//a*sk
+        ConvertSk(&e,&tmp,tab[i]);//t*e
+        AddModPoly(&tmp,&pk[0].tab[i],&pk[0].tab[i],tab[i]);
+        for(int j=0; j < DEGRE_MAX; j++){
+            pk[1].tab[i].coef[j] = tab[i].modulus -a.coef[j];
+        }
+        Free_Poly(&a);Free_Poly(&res);Free_Poly(&tmp);
+	}
+	Free_Poly(&e);
+
+}
+void EncryptionRNS(Poly *plaintext, PolyRNS cipher[2],PolyRNS pk[2],Integer *tab, int k){
+    Poly u,e0,e1,tmp0,tmp1,tmp2,tmp3,res;
+	Alloc_Poly(&u,DEGRE_MAX,tab[0]);Alloc_Poly(&e0,DEGRE_MAX,tab[0]);Alloc_Poly(&e1,DEGRE_MAX,tab[0]);
+    for(int j=0;j<DEGRE_MAX;j++){
+        u.coef[j] = Xkey();
+        e0.coef[j] = Binomiale();
+        e1.coef[j] = Binomiale();
+    }
+    Entier2Poly(&e0,&e0);//t*e0
+    Entier2Poly(&e1,&e1);//t*e1
+	for(int i = 0; i < k; i++){
+        Alloc_Poly(&tmp0,DEGRE_MAX,tab[i]);
+        Alloc_Poly(&tmp1,DEGRE_MAX,tab[i]);
+        Alloc_Poly(&tmp2,DEGRE_MAX,tab[i]);
+        Alloc_Poly(&tmp3,DEGRE_MAX,tab[i]);
+        Alloc_Poly(&res,DEGRE_MAX,tab[i]);
+        ConvertSk(&u,&res,tab[i]);
+	    ConvertSk(&e0,&tmp0,tab[i]);//t*e0
+        ConvertSk(&e1,&tmp1,tab[i]);//t*e1
+        Mult_ModPoly(&res,&pk[0].tab[i],&tmp2,tab[i]);//u*pk[0]
+        AddModPoly(plaintext,&tmp2,&tmp2,tab[i]);//u*pk[0]+plaintext
+        AddModPoly(&tmp2,&tmp0,&tmp2,tab[i]);//u*pk[0]+plaintext+t*e0
+        Mult_ModPoly(&pk[1].tab[i],&res,&tmp3,tab[i]);//u*pk[1]
+        AddModPoly(&tmp3,&tmp1,&tmp3,tab[i]);//u*pk[0]+t*e1
+        for(int j = 0; j < DEGRE_MAX;j++){
+            cipher[0].tab[i].coef[j] = tmp2.coef[j];
+            cipher[1].tab[i].coef[j] = tmp3.coef[j];
+        }
+        Free_Poly(&tmp0);Free_Poly(&tmp1);Free_Poly(&res);
+        Free_Poly(&tmp2);Free_Poly(&tmp3);
+	}
+	Free_Poly(&u);
+
+
+}
+void DecryptionRNS(PolyRNS cipher[],int size,Poly *sk, Poly *decrypt,Integer *tab,int level,int k){
+    assert(level + 1 == k);
+    Poly tmp,res,tmp0;
+    Alloc_Poly(&res,DEGRE_MAX,tab[0]);
+    Alloc_Poly(&tmp0,DEGRE_MAX,tab[0]);
+    for(int i = 0;i<DEGRE_MAX;i++){
+        tmp0.coef[i] = 0;
+    }
+    for(int i=1; i<size;i++){
+        Alloc_Poly(&tmp,DEGRE_MAX,tab[0]);
+        Mult(sk,&tmp,tab[0],i);//sk**i
+        Mult_ModPoly(&cipher[i].tab[0],&tmp,&res,tab[0]);//ct[1][0]*sk
+        AddModPoly(&res,&tmp0,&tmp0,tab[0]);//ct[1][0]*sk+0
+        Free_Poly(&tmp);
+    }
+    AddModPoly(&tmp0,&cipher[0].tab[0],decrypt,tab[0]);//co +c1*s + c2*s^2//ok
+    printf("dec\n");
+    affiche(decrypt,DEGRE_MAX);
+    restcentre(decrypt,tab[0]);
+    for(int i=0;i<DEGRE_MAX;i++){
+        decrypt->coef[i] %= 2;
+    }
+    Free_Poly(&res);Free_Poly(&tmp0);
+}
+
+void DecryptionRNSMult(PolyRNS cipher[3],Poly *sk, Poly *decrypt,Integer *tab,int level,int k){
+    assert(level + 1 == k);
+    Poly tmp,res;
+    Alloc_Poly(&tmp,DEGRE_MAX,tab[0]);Alloc_Poly(&res,DEGRE_MAX,tab[0]);
+    ConvertSk(sk,&tmp,tab[0]);
+    Mult_ModPoly(&cipher[1].tab[0],&tmp,&res,tab[0]);//cmult[1][0]*s
+    Mult_ModPoly(&tmp,&tmp,&tmp,tab[0]);//sk^2
+    Mult_ModPoly(&tmp,&cipher[2].tab[0],&tmp,tab[0]);//cmult[2][0]*sk^2
+    AddModPoly(&res,&cipher[0].tab[0],&res,tab[0]);//cmult[1][0]*s + cmult[0][0]
+    AddModPoly(&res,&tmp,decrypt,tab[0]);//cmult[1][0]*s + cmult[0][0] + cmult[2][0]*sk^2
+    restcentre(decrypt,tab[0]);
+    for(int i=0;i<DEGRE_MAX;i++){
+        decrypt->coef[i] %= 2;
+    }
+    Free_Poly(&tmp);Free_Poly(&res);
+}
+
